@@ -15,6 +15,7 @@
 -export([
     to_json/1,
     incr_keys_examined/1,
+    incr_keys_examined/2,
     incr_docs_examined/1,
     incr_docs_examined/2,
     incr_quorum_docs_examined/1,
@@ -36,8 +37,11 @@ to_json(Stats) ->
     ]}.
 
 incr_keys_examined(Stats) ->
+    incr_keys_examined(Stats, 1).
+
+incr_keys_examined(Stats, N) ->
     Stats#execution_stats{
-        totalKeysExamined = Stats#execution_stats.totalKeysExamined + 1
+        totalKeysExamined = Stats#execution_stats.totalKeysExamined + N
     }.
 
 incr_docs_examined(Stats) ->

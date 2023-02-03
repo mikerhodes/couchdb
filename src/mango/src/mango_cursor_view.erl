@@ -267,10 +267,12 @@ choose_best_index(IndexRanges) ->
 view_cb({meta, Meta}, Acc) ->
     % Map function starting
     put(mango_docs_examined, 0),
+    put(mongo_keys_examined, 0),
     set_mango_msg_timestamp(),
     ok = rexi:stream2({meta, Meta}),
     {ok, Acc};
 view_cb({row, Row}, #mrargs{extra = Options} = Acc) ->
+    put(mongo_keys_examined, get(mongo_keys_examined) + 1),
     ViewRow = #view_row{
         id = couch_util:get_value(id, Row),
         key = couch_util:get_value(key, Row),
@@ -315,7 +317,10 @@ view_cb({row, Row}, #mrargs{extra = Options} = Acc) ->
     {ok, Acc};
 view_cb(complete, Acc) ->
     % Send shard-level execution stats
-    ok = rexi:stream2({execution_stats, {docs_examined, get(mango_docs_examined)}}),
+    ok = rexi:stream2({execution_stats,
+        {docs_examined, get(mango_docs_examined)},
+        {keys_examined, get(mango_keys_examined)}
+    }),
     % Finish view output
     ok = rexi:stream_last(complete),
     {ok, Acc};
@@ -373,12 +378,23 @@ handle_message({row, Props}, Cursor) ->
             couch_log:error("~s :: Error loading doc: ~p", [?MODULE, Error]),
             {ok, Cursor}
     end;
-handle_message({execution_stats, ShardStats}, #cursor{execution_stats = Stats} = Cursor) ->
-    {docs_examined, DocsExamined} = ShardStats,
+% TODO remove clause couchdb 4 -- mixed version upgrade support when adding KeyShardStats
+handle_message({execution_stats, DocShardStats}, #cursor{execution_stats = Stats} = Cursor) ->
+    {docs_examined, DocsExamined} = DocShardStats,
     Cursor1 = Cursor#cursor{
         execution_stats = mango_execution_stats:incr_docs_examined(Stats, DocsExamined)
     },
     {ok, Cursor1};
+handle_message({execution_stats, DocShardStats, KeyShardStats}, #cursor{execution_stats = Stats} = Cursor) ->
+    {docs_examined, DocsExamined} = DocShardStats,
+    {keys_examined, KeysExamined} = KeyShardStats,
+    Cursor1 = Cursor#cursor{
+        execution_stats = mango_execution_stats:incr_docs_examined(Stats, DocsExamined)
+    },
+    Cursor2 = Cursor1#cursor{
+        execution_stats = mango_execution_stats:incr_keys_examined(Stats, KeysExamined)
+    },
+    {ok, Cursor2};
 handle_message(complete, Cursor) ->
     {ok, Cursor};
 handle_message({error, Reason}, _Cursor) ->
