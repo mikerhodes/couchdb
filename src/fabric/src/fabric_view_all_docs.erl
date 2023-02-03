@@ -266,7 +266,13 @@ handle_message(#view_row{} = Row, {Worker, From}, State) ->
 handle_message(complete, Worker, State) ->
     Counters = fabric_dict:update_counter(Worker, 1, State#collector.counters),
     fabric_view:maybe_send_row(State#collector{counters = Counters});
+% TODO remove clause couchdb 4 -- mixed version upgrade support when adding KeyShardStats
 handle_message({execution_stats, _} = Msg, {_, From}, St) ->
+    #collector{callback = Callback, user_acc = AccIn} = St,
+    {Go, Acc} = Callback(Msg, AccIn),
+    rexi:stream_ack(From),
+    {Go, St#collector{user_acc = Acc}};
+handle_message({execution_stats, _, _} = Msg, {_, From}, St) ->
     #collector{callback = Callback, user_acc = AccIn} = St,
     {Go, Acc} = Callback(Msg, AccIn),
     rexi:stream_ack(From),
